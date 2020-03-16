@@ -30,8 +30,10 @@ def setup():
 def keyGen(params):
    """ Generate a private / public key pair """
    (G, g, h, o) = params
-   
+
    # ADD CODE HERE
+   priv = o.random() ###from 1 to the order
+   pub = priv*g   ### generator to the power of private key
 
    return (priv, pub)
 
@@ -41,7 +43,12 @@ def encrypt(params, pub, m):
         raise Exception("Message value to low or high.")
 
    # ADD CODE HERE
-
+    (G,g,h,o)=params#initialise the parameters and generate private key. computer 2 components of the ciphertext
+    priv = o.random()
+#   k = urandom(16)
+    comp1 = priv * g
+    comp2 = priv*pub + m*h
+    c =(comp1,comp2)##(k *g, k * pub + m * h)
     return c
 
 def isCiphertext(params, ciphertext):
@@ -76,54 +83,76 @@ def decrypt(params, priv, ciphertext):
     a , b = ciphertext
 
    # ADD CODE HERE
-
+   ##logh(b(a*x)-1) addition of a_new^-1
+    (G, g, h, o) = params
+#   (a,b)= ciphertext
+    a_new = priv*a
+    hm = b-a_new
+#    hm = (a_new,b_new)
     return logh(params, hm)
 
 #####################################################
 # TASK 2 -- Define homomorphic addition and
 #           multiplication with a public value
-# 
+#
 
 def add(params, pub, c1, c2):
-    """ Given two ciphertexts compute the ciphertext of the 
+    """ Given two ciphertexts compute the ciphertext of the
         sum of their plaintexts.
     """
     assert isCiphertext(params, c1)
     assert isCiphertext(params, c2)
 
-   # ADD CODE HERE
+   # ADD CODE HERE  m0+m1,k0+k1=a0a1,b0b1
+    a0,b0 = c1
+    a1,b1 = c2
+    c3 = a0+a1,b0+b1
 
     return c3
 
 def mul(params, pub, c1, alpha):
-    """ Given a ciphertext compute the ciphertext of the 
+    """ Given a ciphertext compute the ciphertext of the
         product of the plaintext time alpha """
     assert isCiphertext(params, c1)
 
    # ADD CODE HERE
+    a0,b0 = c1
+    c3 = alpha*a0,alpha*b0
 
     return c3
 
 #####################################################
 # TASK 3 -- Define Group key derivation & Threshold
-#           decryption. Assume an honest but curious 
+#           decryption. Assume an honest but curious
 #           set of authorities.
 
 def groupKey(params, pubKeys=[]):
     """ Generate a group public key from a list of public keys """
     (G, g, h, o) = params
+#    k=(0,0)
+   # ADD CODE HERE g^x1+x2+x3 = g^x1*g^x2*g^x3 =g*x1+g*x2+g*x3
+   #### need to start set k = ecpt point cuz you cant add integer to ecpt
+    pub = pubKeys[0]
+    for key in pubKeys[1:]:
+       pub +=key
 
-   # ADD CODE HERE
-
+#    pub = k
     return pub
 
 def partialDecrypt(params, priv, ciphertext, final=False):
-    """ Given a ciphertext and a private key, perform partial decryption. 
+    """ Given a ciphertext and a private key, perform partial decryption.
         If final is True, then return the plaintext. """
     assert isCiphertext(params, ciphertext)
-    
-    # ADD CODE HERE
 
+    # ADD CODE HERE b/a^x1/a^x2 = b-a*x1-a*x2
+#    a1,b1 = ciphertext not full decryption
+#    for key in priv:
+#        b1=b1-a1*key
+    a,b= ciphertext
+#    a1 = priv.pt_mul(a)
+    a1 = priv*a
+    b1= b - a1
+    a1=a
     if final:
         return logh(params, b1)
     else:
@@ -135,14 +164,18 @@ def partialDecrypt(params, priv, ciphertext, final=False):
 #
 
 def corruptPubKey(params, priv, OtherPubKeys=[]):
-    """ Simulate the operation of a corrupt decryption authority. 
+    """ Simulate the operation of a corrupt decryption authority.
         Given a set of public keys from other authorities return a
         public key for the corrupt authority that leads to a group
         public key corresponding to a private key known to the
         corrupt authority. """
     (G, g, h, o) = params
-    
-   # ADD CODE HERE
+
+   # ADD CODE HERE  subtract all public keys to leave yours and add yours
+    pub = priv*g
+
+    for k in OtherPubKeys:
+        pub -= k
 
     return pub
 
@@ -158,6 +191,8 @@ def encode_vote(params, pub, vote):
     assert vote in [0, 1]
 
    # ADD CODE HERE
+    v0 = encrypt(params,pub,(1-vote))
+    v1 = encrypt(params,pub,vote)
 
     return (v0, v1)
 
@@ -165,8 +200,16 @@ def process_votes(params, pub, encrypted_votes):
     """ Given a list of encrypted votes tally them
         to sum votes for zeros and votes for ones. """
     assert isinstance(encrypted_votes, list)
-    
+    tv0,tv1=encrypted_votes[0]####as you need to have the same object
+#    tv1=encrypted_votes[0](1)
    # ADD CODE HERE
+    for v in encrypted_votes[1:]:####start from 1 as you get 0 above
+       a,b = v
+       tv0 = add(params,pub,a,tv0)
+       tv1 = add(params,pub,b,tv1)
+
+
+
 
     return tv0, tv1
 
@@ -206,7 +249,7 @@ def simulate_poll(votes):
 ###########################################################
 # TASK Q1 -- Answer questions regarding your implementation
 #
-# Consider the following game between an adversary A and honest users H1 and H2: 
+# Consider the following game between an adversary A and honest users H1 and H2:
 # 1) H1 picks 3 plaintext integers Pa, Pb, Pc arbitrarily, and encrypts them to the public
 #    key of H2 using the scheme you defined in TASK 1.
 # 2) H1 provides the ciphertexts Ca, Cb and Cc to H2 who flips a fair coin b.
@@ -214,7 +257,7 @@ def simulate_poll(votes):
 #    In case b=1 then H2 homomorphically computes C as the encryption of Pb plus Pc.
 # 3) H2 provides the adversary A, with Ca, Cb, Cc and C.
 #
-# What is the advantage of the adversary in guessing b given your implementation of 
+# What is the advantage of the adversary in guessing b given your implementation of
 # Homomorphic addition? What are the security implications of this?
 
 """ Your Answer here """
@@ -224,8 +267,8 @@ def simulate_poll(votes):
 #
 # Given your implementation of the private poll in TASK 5, how
 # would a malicious user implement encode_vote to (a) distrupt the
-# poll so that it yields no result, or (b) manipulate the poll so 
-# that it yields an arbitrary result. Can those malicious actions 
+# poll so that it yields no result, or (b) manipulate the poll so
+# that it yields an arbitrary result. Can those malicious actions
 # be detected given your implementation?
 
 """ Your Answer here """
